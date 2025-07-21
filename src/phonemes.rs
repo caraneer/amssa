@@ -1,15 +1,17 @@
 use core::fmt::{self, Write as _};
+use std::{convert::Infallible, str::FromStr};
 
 use deunicode::AsciiChars;
 use itertools::peek_nth;
 
-pub trait PhonehashRepr: Default + Eq + Ord {
+pub trait PhonehashRepr: Default + Copy + Eq + Ord {
 	fn stray_bits() -> u32;
 	fn max_phonemes() -> u32;
 	fn is_finalized(&self) -> bool;
 	fn finalize(&mut self, remaining: u32);
 	fn append(&mut self, elem: PhonehashElem) -> bool;
 	fn phoneme_at(&self, index: u32) -> Option<PhonehashElem>;
+	fn starts_with(&self, other: Self) -> bool;
 }
 
 macro_rules! impl_phonehash_repr_uint {
@@ -64,6 +66,13 @@ macro_rules! impl_phonehash_repr_uint {
 					_ => None,
 				}
 			}
+			fn starts_with(&self, other: Self) -> bool {
+				let mut max_phoneme_bits: Self = !Self::default();
+				while (other & max_phoneme_bits) != 0 {
+					max_phoneme_bits = max_phoneme_bits.overflowing_shr(3).0;
+				}
+				*self >= other && *self <= (other | max_phoneme_bits)
+			}
 		}
 	};
 }
@@ -79,6 +88,20 @@ impl_phonehash_repr_uint!(usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct Phonehash<T: PhonehashRepr>(pub(crate) T);
+impl<T: PhonehashRepr> Phonehash<T> {
+	pub fn new(s: &str) -> Self {
+		phonehash_elements(s).collect()
+	}
+	pub fn starts_with(&self, other: Self) -> bool {
+		self.0.starts_with(other.0)
+	}
+}
+impl<T: PhonehashRepr> FromStr for Phonehash<T> {
+	type Err = Infallible;
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		Ok(Self::new(s))
+	}
+}
 impl<T: PhonehashRepr> FromIterator<PhonehashElem> for Phonehash<T> {
 	fn from_iter<I: IntoIterator<Item = PhonehashElem>>(iter: I) -> Self {
 		let mut repr: T = T::default();
@@ -224,10 +247,6 @@ pub fn phonehash_elements(s: &str) -> impl Iterator<Item = PhonehashElem> {
 	})
 }
 
-pub fn phonehash<T: PhonehashRepr>(s: &str) -> Phonehash<T> {
-	phonehash_elements(s).collect()
-}
-
 // convenience traits
 
 pub trait CanPhonehash {
@@ -258,6 +277,8 @@ mod test {
 		// phonetic match
 		assert_eq!("knight".phonehash::<u64>().to_string(), "MB___________________");
 		assert_eq!("nite".phonehash::<u64>().to_string(), "MB___________________");
+		assert_eq!("knight".phonehash::<u8>().to_string(), "MB");
+		assert_eq!("nite".phonehash::<u8>().to_string(), "MB");
 
 		// approximate
 		assert_eq!("phoenix".phonehash::<u64>().to_string(), "FMS__________________");
@@ -270,6 +291,12 @@ mod test {
 		assert_eq!(
 			"knight rheyedhurr".phonehash::<u64>().to_string(),
 			"MBWBW________________"
+		);
+		assert!("knight rider".phonehash::<u64>().starts_with("nite".phonehash::<u64>()));
+		assert!(
+			!"knight"
+				.phonehash::<u64>()
+				.starts_with("nite rheyedhurr".phonehash::<u64>())
 		);
 
 		// vowel normalization
