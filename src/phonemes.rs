@@ -3,7 +3,7 @@ use core::fmt::{self, Write as _};
 use deunicode::AsciiChars;
 use itertools::peek_nth;
 
-pub trait PhonehashRepr: Default {
+pub trait PhonehashRepr: Default + Eq + Ord {
 	fn stray_bits() -> u32;
 	fn max_phonemes() -> u32;
 	fn is_finalized(&self) -> bool;
@@ -78,7 +78,7 @@ impl_phonehash_repr_uint!(usize);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
-pub struct Phonehash<T: PhonehashRepr>(T);
+pub struct Phonehash<T: PhonehashRepr>(pub(crate) T);
 impl<T: PhonehashRepr> FromIterator<PhonehashElem> for Phonehash<T> {
 	fn from_iter<I: IntoIterator<Item = PhonehashElem>>(iter: I) -> Self {
 		let mut repr: T = T::default();
