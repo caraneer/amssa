@@ -4,7 +4,7 @@ use std::{convert::Infallible, str::FromStr};
 use deunicode::AsciiChars;
 use itertools::peek_nth;
 
-pub trait PhonehashRepr: Default + Copy + Eq + Ord {
+pub trait PhonehashRepr: Default + Copy + Clone + Eq + Ord {
 	fn stray_bits() -> u32;
 	fn max_phonemes() -> u32;
 	fn is_finalized(&self) -> bool;
