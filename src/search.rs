@@ -14,9 +14,14 @@ pub trait SearchableItem: Clone {
 pub trait SearchableList {
 	type ListItem: SearchableItem;
 
+	/// The length of the list
 	fn len(&self) -> usize;
-	/// This should be a wrapper for a get_unchecked function
+
+	/// This should be a wrapper for a get_unchecked function, when called by `phonehash_search`, `index` will always
+	/// be less than `self.len()`
 	unsafe fn item_at_unchecked(&self, index: usize) -> &Self::ListItem;
+
+	/// Search this list for the following query. This function assumes that the list is sorted by the phoneme hash
 	fn phonehash_search(&self, query: &Self::ListItem, max_items: usize) -> Vec<Self::ListItem> {
 		// based on the rust stdlib's "binary_search_by" algorithm
 		let mut size = self.len();

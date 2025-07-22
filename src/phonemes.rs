@@ -89,9 +89,11 @@ impl_phonehash_repr_uint!(usize);
 #[repr(transparent)]
 pub struct Phonehash<T: PhonehashRepr>(pub(crate) T);
 impl<T: PhonehashRepr> Phonehash<T> {
+	/// Calculates the new phoneme hash of the string
 	pub fn new(s: &str) -> Self {
 		phonehash_elements(s).collect()
 	}
+	/// it's like `str::starts_with` but more fuzzy and based on the phoneme hash
 	pub fn starts_with(&self, other: Self) -> bool {
 		self.0.starts_with(other.0)
 	}
@@ -251,6 +253,7 @@ pub fn phonehash_elements(s: &str) -> impl Iterator<Item = PhonehashElem> {
 
 pub trait CanPhonehash {
 	fn phonehash_elements(&self) -> impl Iterator<Item = PhonehashElem>;
+	/// Calculates the phoneme hash of the string
 	fn phonehash<T: PhonehashRepr>(&self) -> Phonehash<T> {
 		self.phonehash_elements().collect()
 	}
