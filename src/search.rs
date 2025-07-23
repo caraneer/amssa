@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use strsim::damerau_levenshtein;
 
-use crate::phonemes::{Phonehash, PhonehashRepr};
+use crate::phonemes::{CanPhonehash, Phonehash, PhonehashRepr};
 
 pub trait SearchableItem: Clone {
 	type Repr: PhonehashRepr;
@@ -22,7 +22,8 @@ pub trait SearchableList {
 	unsafe fn item_at_unchecked(&self, index: usize) -> &Self::ListItem;
 
 	/// Search this list for the following query. This function assumes that the list is sorted by the phoneme hash
-	fn phonehash_search(&self, query: &Self::ListItem, max_items: usize) -> Vec<Self::ListItem> {
+	fn phonehash_search(&self, query: &str, max_items: usize) -> Vec<Self::ListItem> {
+		let query_phonemes = query.phonehash::<<Self::ListItem as SearchableItem>::Repr>();
 		// based on the rust stdlib's "binary_search_by" algorithm
 		let mut size = self.len();
 		if size == 0 {
@@ -34,7 +35,7 @@ pub trait SearchableList {
 			let half = size / 2;
 			let mid = base + half;
 
-			let cmp = unsafe { self.item_at_unchecked(mid).as_phoneme() }.cmp(&query.as_phoneme());
+			let cmp = unsafe { self.item_at_unchecked(mid).as_phoneme() }.cmp(&query_phonemes);
 			if cmp == Ordering::Less {
 				base = mid + 1;
 				size -= half + 1;
@@ -51,19 +52,19 @@ pub trait SearchableList {
 		while base < size {
 			// SAFETY: base < size is explicitly checked
 			let base_value = unsafe { self.item_at_unchecked(base).clone() };
-			if base_value.as_phoneme() != query.as_phoneme() {
+			if base_value.as_phoneme() != query_phonemes {
 				break;
 			}
-			result_with_dist.push((damerau_levenshtein(base_value.as_str(), query.as_str()), base_value));
+			result_with_dist.push((damerau_levenshtein(base_value.as_str(), query), base_value));
 			base += 1;
 		}
 		while base < max_item_index {
 			// SAFETY: max_item_index <= size, base < max_item_index
 			let base_value = unsafe { self.item_at_unchecked(base).clone() };
-			if !base_value.as_phoneme().starts_with(query.as_phoneme()) {
+			if !base_value.as_phoneme().starts_with(query_phonemes) {
 				break;
 			}
-			result_with_dist.push((damerau_levenshtein(base_value.as_str(), query.as_str()), base_value));
+			result_with_dist.push((damerau_levenshtein(base_value.as_str(), query), base_value));
 			base += 1;
 		}
 		result_with_dist.sort_by(|a, b| a.0.cmp(&b.0));
@@ -140,7 +141,7 @@ mod test {
 		// Only matching phonemes are returned, even if more are requested.
 		// They should also be sorted by distance
 		assert_eq!(
-			stuff.phonehash_search(&TestObject::new("knight"), 5),
+			stuff.phonehash_search("knight", 5),
 			vec![
 				TestObject::new("knight rider"),
 				TestObject::new("nite writer"),
@@ -148,7 +149,7 @@ mod test {
 			]
 		);
 		assert_eq!(
-			stuff.phonehash_search(&TestObject::new("knight writer"), 5),
+			stuff.phonehash_search("knight writer", 5),
 			vec![
 				TestObject::new("knight rider"),
 				TestObject::new("nite writer"),
@@ -158,29 +159,29 @@ mod test {
 
 		// If less than the ones available are requested, all matching phonemes are used but the result is still capped
 		assert_eq!(
-			stuff.phonehash_search(&TestObject::new("knight rider"), 2),
+			stuff.phonehash_search("knight rider", 2),
 			vec![TestObject::new("knight rider"), TestObject::new("nite writer"),]
 		);
 		assert_eq!(
-			stuff.phonehash_search(&TestObject::new("nite writer"), 2),
+			stuff.phonehash_search("nite writer", 2),
 			vec![TestObject::new("nite writer"), TestObject::new("knight rider"),]
 		);
 		assert_eq!(
-			stuff.phonehash_search(&TestObject::new("neight rheyeder"), 2),
+			stuff.phonehash_search("neight rheyeder", 2),
 			vec![TestObject::new("neight rheyeder"), TestObject::new("knight rider"),]
 		);
 
 		// but partial matches are a different story
 		assert_eq!(
-			stuff.phonehash_search(&TestObject::new("knight"), 2),
+			stuff.phonehash_search("knight", 2),
 			vec![TestObject::new("knight rider"), TestObject::new("nite writer")]
 		);
 		assert_eq!(
-			stuff.phonehash_search(&TestObject::new("nite"), 2),
+			stuff.phonehash_search("nite", 2),
 			vec![TestObject::new("nite writer"), TestObject::new("knight rider")]
 		);
 		assert_eq!(
-			stuff.phonehash_search(&TestObject::new("neight"), 2),
+			stuff.phonehash_search("neight", 2),
 			vec![TestObject::new("knight rider"), TestObject::new("nite writer")]
 		);
 	}
